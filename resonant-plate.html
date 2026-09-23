@@ -1,0 +1,1744 @@
+<meta charset="UTF-8" />
+<title>Resonant Plate</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link
+  href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&display=swap"
+  rel="stylesheet"
+/>
+<style>
+  :root {
+    --bg: #0c0d0f;
+    --particle: #ece4d3;
+    --text-primary: #f2ede2;
+    --text-secondary: #9a988f;
+    --accent: #c9a15a;
+    --accent-strong: #e5c07d;
+    --line: rgba(236, 228, 211, 0.16);
+    --blur-amount: 6px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    height: 100%;
+    background: var(--bg);
+    color: var(--text-primary);
+    overflow-x: hidden;
+  }
+
+  body {
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  #stage-wrap {
+    position: fixed;
+    inset: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 2rem;
+    box-sizing: border-box;
+    z-index: 0;
+  }
+
+  #stage-wrap.fill { padding: 0; }
+
+  /* ?embed in the URL strips all authoring UI, leaving just the live canvas —
+     the same file works as the tuning tool and as a clean drop-in background. */
+  body.embed-mode .hud,
+  body.embed-mode .panel-toggle,
+  body.embed-mode .control-panel {
+    display: none !important;
+  }
+
+  #stage {
+    position: relative;
+    flex: 0 0 auto;
+    overflow: hidden;
+    background: var(--bg);
+  }
+
+  #chladni-canvas {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    display: block;
+    pointer-events: none;
+  }
+
+  .blur-layer {
+    position: absolute;
+    inset: 0;
+    backdrop-filter: blur(var(--blur-amount));
+    -webkit-backdrop-filter: blur(var(--blur-amount));
+    pointer-events: none;
+  }
+
+  .hud {
+    position: fixed;
+    top: 2rem;
+    right: 2rem;
+    display: flex;
+    align-items: flex-start;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.72rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    z-index: 3;
+    pointer-events: none;
+  }
+
+  .hud .mode {
+    display: flex;
+    gap: 1.25rem;
+    align-items: baseline;
+    font-variant-numeric: tabular-nums;
+    max-width: 16rem;
+  }
+
+  .hud .mode span.val {
+    color: var(--accent-strong);
+    font-size: 0.85rem;
+  }
+
+  .hud .mode#hud-mode-shape span.val {
+    max-width: 12rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: inline-block;
+    vertical-align: bottom;
+  }
+
+  .panel-toggle {
+    position: fixed;
+    top: 4rem;
+    right: 2rem;
+    z-index: 10;
+    padding: 0.55rem 0.9rem;
+    border: 1px solid var(--line);
+    background: rgba(12, 13, 15, 0.7);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.7rem;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.2s ease;
+  }
+  .panel-toggle:hover { border-color: var(--accent); }
+
+  .control-panel {
+    position: fixed;
+    top: 4rem;
+    right: 2rem;
+    z-index: 10;
+    width: min(360px, calc(100vw - 2.4rem));
+    max-height: calc(100vh - 6rem);
+    overflow-y: auto;
+    overflow-x: hidden;
+    background: rgba(12, 13, 15, 0.82);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border: 1px solid var(--line);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+  }
+
+  .control-panel[hidden], .panel-toggle[hidden] { display: none; }
+
+  .panel-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.9rem 1rem;
+    border-bottom: 1px solid var(--line);
+    font-size: 0.7rem;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--accent);
+  }
+
+  .panel-close {
+    background: none;
+    border: none;
+    color: var(--text-secondary);
+    font-size: 1rem;
+    line-height: 1;
+    cursor: pointer;
+    padding: 0;
+  }
+  .panel-close:hover { color: var(--text-primary); }
+
+  .panel-body { padding: 0.4rem 1rem 0.6rem; }
+  .panel-body section { padding: 0.8rem 0; border-bottom: 1px solid var(--line); }
+  .panel-body section:last-child { border-bottom: none; }
+
+  .panel-body h3 {
+    margin: 0 0 0.6rem 0;
+    font-size: 0.62rem;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--text-secondary);
+    font-weight: 500;
+  }
+
+  .ctl-row {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.55rem;
+    font-size: 0.68rem;
+    color: var(--text-secondary);
+  }
+
+  .ctl-row label { flex: 0 0 5.6rem; }
+  .ctl-row input[type="range"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    width: 100%;
+    accent-color: var(--accent);
+  }
+  .ctl-row .v {
+    flex: 0 0 3.4rem;
+    text-align: right;
+    color: var(--text-primary);
+    font-variant-numeric: tabular-nums;
+  }
+  .ctl-row input[type="color"] {
+    width: 2.2rem;
+    height: 1.5rem;
+    padding: 0;
+    border: 1px solid var(--line);
+    background: none;
+    cursor: pointer;
+  }
+  .ctl-row input[type="checkbox"] { accent-color: var(--accent); }
+
+  .color-row { gap: 1.25rem; }
+
+  .ctl-row select {
+    flex: 1 1 auto;
+    min-width: 0;
+    background: rgba(12, 13, 15, 0.4);
+    border: 1px solid var(--line);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.04em;
+    padding: 0.3rem 0.4rem;
+    cursor: pointer;
+  }
+  .ctl-row select:hover { border-color: var(--accent); }
+
+  .ctl-row input[type="file"] {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.6rem;
+    color: var(--text-secondary);
+  }
+  .ctl-row input[type="file"]::file-selector-button {
+    padding: 0.3rem 0.5rem;
+    margin-right: 0.5rem;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.62rem;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    border-radius: 0;
+  }
+  .ctl-row input[type="file"]::file-selector-button:hover { border-color: var(--accent); }
+
+  .ctl-row input[type="number"] {
+    width: 4.2rem;
+    flex: 0 0 auto;
+    background: rgba(12, 13, 15, 0.4);
+    border: 1px solid var(--line);
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.66rem;
+    padding: 0.3rem 0.4rem;
+  }
+  .ctl-row .dim-sep { flex: 0 0 auto; color: var(--text-secondary); }
+
+  .ctl-row .status-text {
+    flex: 1 1 auto;
+    min-width: 0;
+    text-align: left;
+    color: var(--text-primary);
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .segmented {
+    display: flex;
+    flex: 1 1 auto;
+    border: 1px solid var(--line);
+    overflow: hidden;
+  }
+  .seg-btn {
+    flex: 1 1 50%;
+    padding: 0.35rem 0.4rem;
+    background: transparent;
+    border: none;
+    color: var(--text-secondary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.64rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.2s ease, color 0.2s ease;
+  }
+  .seg-btn + .seg-btn { border-left: 1px solid var(--line); }
+  .seg-btn.active { background: rgba(201, 161, 90, 0.16); color: var(--text-primary); }
+  .seg-btn:hover { color: var(--text-primary); }
+
+  #steering-params, #grain-params { margin-bottom: 0.2rem; }
+
+  .panel-body > section > .panel-btn { width: 100%; margin-top: 0.3rem; }
+
+  .panel-foot {
+    display: flex;
+    gap: 0.6rem;
+    padding: 0.8rem 1rem;
+    border-top: 1px solid var(--line);
+  }
+
+  .panel-btn {
+    padding: 0.5rem 0.6rem;
+    border: 1px solid var(--line);
+    background: transparent;
+    color: var(--text-primary);
+    font-family: "IBM Plex Mono", ui-monospace, monospace;
+    font-size: 0.66rem;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: border-color 0.2s ease, background 0.2s ease;
+  }
+  .panel-foot .panel-btn { flex: 1 1 auto; }
+  .panel-btn:hover { border-color: var(--accent); background: rgba(201, 161, 90, 0.08); }
+
+  @media (max-width: 640px) {
+    .hud { top: 1.2rem; right: 1.2rem; }
+    .panel-toggle, .control-panel { top: 3.6rem; right: 1.2rem; }
+    #stage-wrap { padding: 1rem; }
+  }
+</style>
+
+<div id="stage-wrap">
+  <div id="stage">
+    <canvas id="chladni-canvas" aria-hidden="true"></canvas>
+    <div class="blur-layer" aria-hidden="true"></div>
+  </div>
+</div>
+
+<div class="hud">
+  <div class="mode" id="hud-mode-numeric">
+    <span>n <span class="val" id="mode-n">4</span></span>
+    <span>m <span class="val" id="mode-m">5</span></span>
+  </div>
+  <div class="mode" id="hud-mode-shape" hidden>
+    <span>Shape <span class="val" id="mode-shape-name">—</span></span>
+  </div>
+</div>
+
+<button id="panel-toggle" class="panel-toggle" type="button" hidden>Controls</button>
+
+<div id="control-panel" class="control-panel">
+  <div class="panel-head">
+    <span>Parameters</span>
+    <button id="panel-close" class="panel-close" type="button" aria-label="Hide controls">×</button>
+  </div>
+  <div class="panel-body">
+    <section>
+      <h3>Canvas</h3>
+      <div class="ctl-row">
+        <label for="ctl-aspect">Aspect</label>
+        <select id="ctl-aspect">
+          <option value="1:1">Square 1:1</option>
+          <option value="4:5">Portrait 4:5</option>
+          <option value="3:4">Portrait 3:4</option>
+          <option value="9:16">Portrait 9:16</option>
+          <option value="5:4">Landscape 5:4</option>
+          <option value="4:3">Landscape 4:3</option>
+          <option value="16:9">Landscape 16:9</option>
+          <option value="match-svg">Match SVG</option>
+          <option value="fill">Fill viewport</option>
+          <option value="dimensions">Dimensions</option>
+        </select>
+      </div>
+      <div class="ctl-row" id="dimensions-row" hidden>
+        <label for="ctl-dim-w">Size (px)</label>
+        <input type="number" id="ctl-dim-w" min="16" max="8000" step="1" value="1080" />
+        <span class="dim-sep">×</span>
+        <input type="number" id="ctl-dim-h" min="16" max="8000" step="1" value="1080" />
+      </div>
+    </section>
+
+    <section>
+      <h3>Particles</h3>
+      <div class="ctl-row">
+        <label for="ctl-size">Size</label>
+        <input type="range" id="ctl-size" min="0.2" max="3" step="0.05" value="0.65" />
+        <span class="v" id="out-size">0.65</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-density">Density</label>
+        <input type="range" id="ctl-density" min="0.001" max="0.01" step="0.0005" value="0.0045" />
+        <span class="v" id="out-density">0.0045</span>
+      </div>
+    </section>
+
+    <section>
+      <h3>Shape</h3>
+      <div class="ctl-row">
+        <label>Interpret</label>
+        <div class="segmented" id="svg-interp-toggle">
+          <button type="button" class="seg-btn active" data-interp="outline">Outline</button>
+          <button type="button" class="seg-btn" data-interp="density">Density</button>
+        </div>
+      </div>
+      <div id="outline-upload">
+        <div class="ctl-row">
+          <label for="ctl-svg-file">Upload</label>
+          <input type="file" id="ctl-svg-file" accept=".svg,image/svg+xml" />
+        </div>
+        <div class="ctl-row">
+          <label>File</label>
+          <span class="status-text" id="svg-status">No shape loaded</span>
+        </div>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-svg-enabled">Use shape</label>
+        <input type="checkbox" id="ctl-svg-enabled" disabled />
+      </div>
+      <div id="outline-params">
+        <div class="ctl-row">
+          <label for="ctl-svg-interior">Interior</label>
+          <input type="range" id="ctl-svg-interior" min="0" max="0.9" step="0.05" value="0.3" />
+          <span class="v" id="out-svg-interior">0.30</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-svg-pathwidth">Path width</label>
+          <input type="range" id="ctl-svg-pathwidth" min="0.3" max="6" step="0.1" value="1.5" />
+          <span class="v" id="out-svg-pathwidth">1.5%</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-svg-coverage">Coverage</label>
+          <input type="range" id="ctl-svg-coverage" min="40" max="100" step="1" value="85" />
+          <span class="v" id="out-svg-coverage">85%</span>
+        </div>
+      </div>
+      <div id="density-params" hidden>
+        <div class="ctl-row">
+          <label for="ctl-density-stop">Stop</label>
+          <input type="range" id="ctl-density-stop" min="5" max="95" step="1" value="40" />
+          <span class="v" id="out-density-stop">40%</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-density-gamma">Gamma</label>
+          <input type="range" id="ctl-density-gamma" min="0.3" max="4" step="0.1" value="1.5" />
+          <span class="v" id="out-density-gamma">1.5</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-density-count">Particles</label>
+          <input type="range" id="ctl-density-count" min="2000" max="150000" step="1000" value="50000" />
+          <span class="v" id="out-density-count">50000</span>
+        </div>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-svg-settle">Settle time</label>
+        <input type="range" id="ctl-svg-settle" min="1" max="20" step="0.5" value="4" />
+        <span class="v" id="out-svg-settle">4.0s</span>
+      </div>
+      <button id="btn-svg-clear" class="panel-btn" type="button">Clear shape</button>
+    </section>
+
+    <section>
+      <h3>Motion &amp; pattern</h3>
+      <div class="ctl-row">
+        <label>Style</label>
+        <div class="segmented" id="motion-style-toggle">
+          <button type="button" class="seg-btn active" data-style="steering">Steering</button>
+          <button type="button" class="seg-btn" data-style="grain">Grain</button>
+        </div>
+      </div>
+
+      <div id="steering-params">
+        <div class="ctl-row">
+          <label for="ctl-speed">Speed</label>
+          <input type="range" id="ctl-speed" min="0.5" max="6" step="0.1" value="2.2" />
+          <span class="v" id="out-speed">2.20</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-force">Force</label>
+          <input type="range" id="ctl-force" min="0.02" max="0.5" step="0.01" value="0.12" />
+          <span class="v" id="out-force">0.12</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-threshold">Threshold</label>
+          <input type="range" id="ctl-threshold" min="0.01" max="0.3" step="0.01" value="0.05" />
+          <span class="v" id="out-threshold">0.05</span>
+        </div>
+      </div>
+
+      <div id="grain-params" hidden>
+        <div class="ctl-row">
+          <label for="ctl-grain-amp">Amplitude</label>
+          <input type="range" id="ctl-grain-amp" min="0.005" max="0.2" step="0.005" value="0.05" />
+          <span class="v" id="out-grain-amp">0.050</span>
+        </div>
+        <div class="ctl-row">
+          <label for="ctl-grain-floor">Floor</label>
+          <input type="range" id="ctl-grain-floor" min="0.0005" max="0.02" step="0.0005" value="0.004" />
+          <span class="v" id="out-grain-floor">0.0040</span>
+        </div>
+      </div>
+
+      <div class="ctl-row">
+        <label for="ctl-margin">Margin</label>
+        <input type="range" id="ctl-margin" min="0" max="0.2" step="0.005" value="0.06" />
+        <span class="v" id="out-margin">0.060</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-cycle">Cycle</label>
+        <input type="range" id="ctl-cycle" min="2" max="20" step="0.5" value="7" />
+        <span class="v" id="out-cycle">7.0s</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-vib-duration">Duration</label>
+        <input type="range" id="ctl-vib-duration" min="1" max="15" step="0.5" value="4" />
+        <span class="v" id="out-vib-duration">4.0s</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-vib-easein">Ease in</label>
+        <input type="range" id="ctl-vib-easein" min="5" max="50" step="1" value="25" />
+        <span class="v" id="out-vib-easein">25%</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-modemin">Mode min</label>
+        <input type="range" id="ctl-modemin" min="1" max="15" step="1" value="1" />
+        <span class="v" id="out-modemin">1</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-modemax">Mode max</label>
+        <input type="range" id="ctl-modemax" min="2" max="16" step="1" value="9" />
+        <span class="v" id="out-modemax">9</span>
+      </div>
+      <div class="ctl-row">
+        <label for="ctl-autocycle">Auto-cycle</label>
+        <input type="checkbox" id="ctl-autocycle" />
+      </div>
+      <button id="btn-shuffle" class="panel-btn" type="button">Shuffle now</button>
+    </section>
+
+    <section>
+      <h3>Blur</h3>
+      <div class="ctl-row">
+        <label for="ctl-blur">Amount</label>
+        <input type="range" id="ctl-blur" min="0" max="24" step="0.5" value="6" />
+        <span class="v" id="out-blur">6.0</span>
+      </div>
+    </section>
+
+    <section>
+      <h3>Color</h3>
+      <div class="ctl-row color-row">
+        <label for="ctl-bg">Background</label>
+        <input type="color" id="ctl-bg" value="#0c0d0f" />
+        <label for="ctl-particle">Particle</label>
+        <input type="color" id="ctl-particle" value="#ece4d3" />
+      </div>
+    </section>
+  </div>
+  <div class="panel-foot">
+    <button id="btn-reset" class="panel-btn" type="button">Reset</button>
+    <button id="btn-export" class="panel-btn" type="button">Export PNG</button>
+    <button id="btn-copy" class="panel-btn" type="button">Copy config</button>
+  </div>
+</div>
+
+<script>
+  (function () {
+    if (new URLSearchParams(window.location.search).has("embed")) {
+      document.body.classList.add("embed-mode");
+    }
+
+    const stageEl = document.getElementById("stage");
+    const stageWrapEl = document.getElementById("stage-wrap");
+    const canvas = document.getElementById("chladni-canvas");
+    const ctx = canvas.getContext("2d");
+    const modeNEl = document.getElementById("mode-n");
+    const modeMEl = document.getElementById("mode-m");
+    const hudModeNumeric = document.getElementById("hud-mode-numeric");
+    const hudModeShape = document.getElementById("hud-mode-shape");
+    const modeShapeEl = document.getElementById("mode-shape-name");
+
+    const CONFIG = {
+      particleDensity: 0.0045, // particles per CSS px^2
+      minParticles: 1400,
+      maxParticles: 7000,
+      marginRatio: 0.06, // margin as a fraction of min(width, height)
+      threshold: 0.05,
+      dotRadius: 0.65,
+      maxSpeed: 2.2,
+      maxForce: 0.12,
+      minMode: 1,
+      maxMode: 9,
+      cycleMs: 7000,
+      particleColor: "#ece4d3",
+      bgColor: "#0c0d0f",
+      grainAmplitude: 0.05, // step size scale for grain motion style
+      grainMinWalk: 0.004, // floor step size so grain particles never fully freeze
+      svgInterior: 0.3, // field value inside a loaded SVG's fill, away from the path
+      svgPathWidth: 1.5, // stroke width used to rasterize the path mask, as % of shape size
+      svgSettleSeconds: 4, // worst-case time for an out-of-shape particle to reach the shape
+      svgCoverage: 85, // % of particles that participate in settling onto the shape
+      dimW: 1080, // "Dimensions" mode: exact output resolution, px
+      dimH: 1080,
+      vibrationDuration: 4, // seconds: total ease-in + ease-out, then a hard stop
+      vibrationEaseIn: 0.25, // fraction of vibrationDuration spent easing in
+      densityParticleCount: 50000, // total particle budget, density interpretation only
+      densityGamma: 1.5, // >1 sharpens the solid/scattered/empty transition
+      densityStop: 0.4, // fraction of height, measured from the bottom, that's fully opaque
+    };
+
+    const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+    let dpr = Math.min(window.devicePixelRatio || 1, 2);
+    let width = 0;
+    let height = 0; // CSS pixels
+    let w1, w2, h1, h2; // roaming bounds, CSS pixels
+    let n = 4;
+    let m = 5;
+    let particles = [];
+    let motionStyle = "steering"; // "steering" | "grain"
+
+    const ASPECT_PRESETS = {
+      "1:1": 1,
+      "4:5": 4 / 5,
+      "3:4": 3 / 4,
+      "9:16": 9 / 16,
+      "5:4": 5 / 4,
+      "4:3": 4 / 3,
+      "16:9": 16 / 9,
+    };
+    let aspectMode = "1:1";
+    let svgAspect = 1; // natural width/height of the last uploaded SVG
+
+    function getTargetAspect() {
+      if (aspectMode === "fill") return window.innerWidth / window.innerHeight;
+      if (aspectMode === "match-svg") return svgAspect;
+      if (aspectMode === "dimensions") return CONFIG.dimW / CONFIG.dimH;
+      return ASPECT_PRESETS[aspectMode] || 1;
+    }
+
+    function rand(a, b) { return a + Math.random() * (b - a); }
+    function randInt(a, b) { return Math.floor(rand(a, b)); }
+    function clamp(v, lo, hi) { return Math.max(lo, Math.min(hi, v)); }
+    function mapRange(v, a1, b1, a2, b2) { return a2 + ((v - a1) / (b1 - a1)) * (b2 - a2); }
+
+    // --- Vibration envelope -------------------------------------------------
+    // Mimics briefly playing a tone through the plate then cutting it: a single
+    // smooth 0 -> 1 -> 0 amplitude curve that scales every particle's movement
+    // uniformly, across every motion style and SVG mode. Once it completes, the
+    // multiplier locks at exactly 0 and every particle is fully motionless —
+    // no residual jitter, no ambient wandering — until the next trigger.
+    let vibrationStartTime = null;
+
+    function smoothstep(t) {
+      t = clamp(t, 0, 1);
+      return t * t * (3 - 2 * t);
+    }
+
+    function triggerVibration() {
+      vibrationStartTime = performance.now();
+      // Clear stored momentum so every burst starts from true rest, with no
+      // carried-over velocity from a previous cycle suddenly reappearing.
+      for (const p of particles) {
+        p.velocity.x = 0;
+        p.velocity.y = 0;
+        p.acceleration.x = 0;
+        p.acceleration.y = 0;
+      }
+    }
+
+    function getVibrationEnvelope() {
+      if (vibrationStartTime === null) return 0;
+      const elapsed = (performance.now() - vibrationStartTime) / 1000;
+      const duration = CONFIG.vibrationDuration;
+      if (elapsed >= duration) {
+        vibrationStartTime = null;
+        return 0;
+      }
+      const easeInTime = duration * CONFIG.vibrationEaseIn;
+      const easeOutTime = Math.max(duration - easeInTime, 1e-6);
+      if (elapsed < easeInTime) {
+        return smoothstep(easeInTime > 0 ? elapsed / easeInTime : 1);
+      }
+      return 1 - smoothstep((elapsed - easeInTime) / easeOutTime);
+    }
+
+    class Vec2 {
+      constructor(x = 0, y = 0) { this.x = x; this.y = y; }
+      add(v) { this.x += v.x; this.y += v.y; return this; }
+      sub(v) { return new Vec2(this.x - v.x, this.y - v.y); }
+      mult(s) { this.x *= s; this.y *= s; return this; }
+      mag() { return Math.hypot(this.x, this.y); }
+      setMag(s) { const mg = this.mag() || 1; this.x = (this.x / mg) * s; this.y = (this.y / mg) * s; return this; }
+      limit(max) { if (this.mag() > max) this.setMag(max); return this; }
+      copy() { return new Vec2(this.x, this.y); }
+      static random2D() { const a = rand(0, Math.PI * 2); return new Vec2(Math.cos(a), Math.sin(a)); }
+    }
+
+    function chladni(x, y) {
+      return (
+        Math.cos(n * Math.PI * x) * Math.cos(m * Math.PI * y) -
+        Math.cos(m * Math.PI * x) * Math.cos(n * Math.PI * y)
+      );
+    }
+
+    // --- SVG shape field ---------------------------------------------------
+    // An uploaded SVG is rasterized twice via the browser's own renderer (safe:
+    // an <img>-sourced SVG never executes scripts or loads external resources).
+    // One pass forces solid fill (interior mask), the other forces stroke-only
+    // (path mask). fieldValue() then reads those instead of the chladni surface:
+    // 0 on the path (a "node" particles converge on), a small residual value
+    // inside the fill (keeps redistributing to fill the area), 1 outside (pushes
+    // particles back toward the shape).
+    const SVG_RASTER_MAX = 320; // budget for the raster's longer dimension
+    let svgRasterW = SVG_RASTER_MAX;
+    let svgRasterH = SVG_RASTER_MAX;
+    let svgFillData = null;
+    let svgStrokeData = null;
+    let svgDistField = null; // chamfer distance (in raster cells) to nearest on-shape pixel
+    let svgActive = false;
+    let svgFileName = "";
+    let lastSvgText = "";
+    let svgInterpretation = "outline"; // "outline" | "density"
+
+    // Density mode: a pure, built-in vertical gradient — no image involved.
+    // Below the stop line it's a guaranteed-solid fillRect() in draw() (no
+    // amount of particle packing reads as truly opaque); above it, particle
+    // density eases from dense near the stop down to none at the top edge.
+    // Purely a function of CONFIG, so there's no rasterization/caching step —
+    // it's evaluated live. stopNy is the stop line's own normalized Y.
+    function densityStopNy() {
+      return 1 - 2 * CONFIG.densityStop;
+    }
+
+    // ny must be within the fade zone (top edge .. stop line); density is 0
+    // at the top edge and 1 right at the stop line.
+    function densityAtY(ny) {
+      const stopNy = densityStopNy();
+      const span = stopNy + 1; // distance from the top edge to the stop line
+      if (span <= 1e-6) return 0;
+      const t = clamp((ny + 1) / span, 0, 1);
+      return Math.pow(t, CONFIG.densityGamma);
+    }
+
+    function hexToRgb(hex) {
+      const v = hex.replace("#", "");
+      const bigint = parseInt(v, 16);
+      return { r: (bigint >> 16) & 255, g: (bigint >> 8) & 255, b: bigint & 255 };
+    }
+
+    function getSvgUserUnitSize(svgText) {
+      const viewBoxMatch = svgText.match(/viewBox\s*=\s*["']([^"']+)["']/i);
+      if (viewBoxMatch) {
+        const parts = viewBoxMatch[1].trim().split(/[\s,]+/).map(Number);
+        if (parts.length === 4 && parts[2] > 0 && parts[3] > 0) {
+          return Math.max(parts[2], parts[3]);
+        }
+      }
+      const widthMatch = svgText.match(/<svg[^>]*\swidth\s*=\s*["']([\d.]+)/i);
+      const heightMatch = svgText.match(/<svg[^>]*\sheight\s*=\s*["']([\d.]+)/i);
+      const w = widthMatch ? parseFloat(widthMatch[1]) : null;
+      const h = heightMatch ? parseFloat(heightMatch[1]) : null;
+      if (w && h) return Math.max(w, h);
+      return 100;
+    }
+
+    function probeSvgAspect(svgText) {
+      return new Promise((resolve, reject) => {
+        const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(svgText);
+        const img = new Image();
+        img.onload = () => resolve((img.naturalWidth || 300) / (img.naturalHeight || 300));
+        img.onerror = () => reject(new Error("Could not read SVG dimensions"));
+        img.src = dataUrl;
+      });
+    }
+
+    // Rasterizes into a box shaped like the CURRENT stage aspect ratio (not a
+    // fixed square) — so sampling it against stage-normalized coordinates never
+    // stretches the shape, whatever aspect ratio the stage is set to. The SVG's
+    // own natural image is contain-fit within that box (letterboxed if its aspect
+    // doesn't match the stage's).
+    function rasterizeSvgVariant(svgText, styleOverride, rasterW, rasterH) {
+      return new Promise((resolve, reject) => {
+        const withStyle = svgText.replace(/<svg([^>]*)>/i, (full, attrs) => `<svg${attrs}><style>${styleOverride}</style>`);
+        const dataUrl = "data:image/svg+xml;charset=utf-8," + encodeURIComponent(withStyle);
+        const img = new Image();
+        img.onload = () => {
+          const nW = img.naturalWidth || 300;
+          const nH = img.naturalHeight || 300;
+          const imgAspect = nW / nH;
+          const boxAspect = rasterW / rasterH;
+          let drawW, drawH;
+          if (imgAspect >= boxAspect) { drawW = rasterW; drawH = rasterW / imgAspect; }
+          else { drawH = rasterH; drawW = rasterH * imgAspect; }
+          const offX = (rasterW - drawW) / 2;
+          const offY = (rasterH - drawH) / 2;
+          const off = document.createElement("canvas");
+          off.width = rasterW;
+          off.height = rasterH;
+          const offCtx = off.getContext("2d");
+          offCtx.clearRect(0, 0, rasterW, rasterH);
+          offCtx.drawImage(img, offX, offY, drawW, drawH);
+          resolve(offCtx.getImageData(0, 0, rasterW, rasterH).data);
+        };
+        img.onerror = () => reject(new Error("Could not render SVG"));
+        img.src = dataUrl;
+      });
+    }
+
+    function svgAlphaAt(data, nx, ny) {
+      let px = Math.floor(((nx + 1) / 2) * svgRasterW);
+      let py = Math.floor(((ny + 1) / 2) * svgRasterH);
+      px = clamp(px, 0, svgRasterW - 1);
+      py = clamp(py, 0, svgRasterH - 1);
+      return data[(py * svgRasterW + px) * 4 + 3];
+    }
+
+    function fieldValue(x, y) {
+      if (svgActive && svgFillData && svgStrokeData) {
+        if (svgAlphaAt(svgStrokeData, x, y) > 40) return 0;
+        if (svgAlphaAt(svgFillData, x, y) > 40) return CONFIG.svgInterior;
+        return 1;
+      }
+      return chladni(x, y);
+    }
+
+    function svgOutsideAt(x, y) {
+      return svgAlphaAt(svgStrokeData, x, y) <= 40 && svgAlphaAt(svgFillData, x, y) <= 40;
+    }
+
+    // Two-pass chamfer distance transform: for every raster cell, the approximate
+    // distance (in cells) to the nearest on-shape pixel. This is what lets an
+    // out-of-shape particle move directly toward the shape instead of relying on
+    // an undirected random walk to eventually stumble into it.
+    function buildDistanceField(fillData, strokeData, rasterW, rasterH) {
+      const W = rasterW;
+      const H = rasterH;
+      const dist = new Float32Array(W * H);
+      const INF = 1e6;
+      for (let i = 0; i < W * H; i++) {
+        const a = i * 4 + 3;
+        dist[i] = fillData[a] > 40 || strokeData[a] > 40 ? 0 : INF;
+      }
+      const D1 = 1;
+      const D2 = Math.SQRT2;
+      for (let y = 0; y < H; y++) {
+        for (let x = 0; x < W; x++) {
+          const i = y * W + x;
+          let d = dist[i];
+          if (x > 0) d = Math.min(d, dist[i - 1] + D1);
+          if (y > 0) d = Math.min(d, dist[i - W] + D1);
+          if (x > 0 && y > 0) d = Math.min(d, dist[i - W - 1] + D2);
+          if (x < W - 1 && y > 0) d = Math.min(d, dist[i - W + 1] + D2);
+          dist[i] = d;
+        }
+      }
+      for (let y = H - 1; y >= 0; y--) {
+        for (let x = W - 1; x >= 0; x--) {
+          const i = y * W + x;
+          let d = dist[i];
+          if (x < W - 1) d = Math.min(d, dist[i + 1] + D1);
+          if (y < H - 1) d = Math.min(d, dist[i + W] + D1);
+          if (x < W - 1 && y < H - 1) d = Math.min(d, dist[i + W + 1] + D2);
+          if (x > 0 && y < H - 1) d = Math.min(d, dist[i + W - 1] + D2);
+          dist[i] = d;
+        }
+      }
+      return dist;
+    }
+
+    function svgDistAtCell(px, py) {
+      px = clamp(px, 0, svgRasterW - 1);
+      py = clamp(py, 0, svgRasterH - 1);
+      return svgDistField[py * svgRasterW + px];
+    }
+
+    // Direction (unit vector, normalized -1..1 domain) that most reduces distance
+    // to the shape, via finite difference on the precomputed distance field.
+    function svgGradientDirection(nx, ny) {
+      const px = clamp(Math.floor(((nx + 1) / 2) * svgRasterW), 0, svgRasterW - 1);
+      const py = clamp(Math.floor(((ny + 1) / 2) * svgRasterH), 0, svgRasterH - 1);
+      const gx = (svgDistAtCell(px + 1, py) - svgDistAtCell(px - 1, py)) / 2;
+      const gy = (svgDistAtCell(px, py + 1) - svgDistAtCell(px, py - 1)) / 2;
+      const mag = Math.hypot(gx, gy);
+      if (mag < 1e-4) {
+        const a = rand(0, Math.PI * 2);
+        return { x: Math.cos(a), y: Math.sin(a) };
+      }
+      return { x: -gx / mag, y: -gy / mag };
+    }
+
+    function assignStrayFlags() {
+      const strayFraction = 1 - CONFIG.svgCoverage / 100;
+      for (const p of particles) {
+        p.stray = Math.random() < strayFraction;
+      }
+    }
+
+    async function loadSvgShape(svgText, fileName, isNewUpload) {
+      const svgStatusEl = document.getElementById("svg-status");
+      const svgEnabledCheckbox = document.getElementById("ctl-svg-enabled");
+      svgStatusEl.textContent = "Rendering…";
+      try {
+        const naturalAspect = await probeSvgAspect(svgText);
+        svgAspect = naturalAspect;
+        // A fresh upload snaps the canvas to the shape's own proportions; a
+        // re-render (path width / aspect tweak) keeps whatever aspect is set.
+        if (isNewUpload) setAspectMode("match-svg");
+
+        const stageAspect = getTargetAspect();
+        let rasterW, rasterH;
+        if (stageAspect >= 1) { rasterW = SVG_RASTER_MAX; rasterH = SVG_RASTER_MAX / stageAspect; }
+        else { rasterH = SVG_RASTER_MAX; rasterW = SVG_RASTER_MAX * stageAspect; }
+        rasterW = Math.max(1, Math.round(rasterW));
+        rasterH = Math.max(1, Math.round(rasterH));
+
+        const unitSize = getSvgUserUnitSize(svgText);
+        const strokeWidth = (CONFIG.svgPathWidth / 100) * unitSize;
+        const [fillData, strokeData] = await Promise.all([
+          rasterizeSvgVariant(svgText, "*{fill:#ffffff !important;stroke:none !important;}", rasterW, rasterH),
+          rasterizeSvgVariant(
+            svgText,
+            `*{fill:none !important;stroke:#ffffff !important;stroke-width:${strokeWidth}px !important;stroke-linecap:round !important;stroke-linejoin:round !important;}`,
+            rasterW,
+            rasterH
+          ),
+        ]);
+        svgFillData = fillData;
+        svgStrokeData = strokeData;
+        svgRasterW = rasterW;
+        svgRasterH = rasterH;
+        svgDistField = buildDistanceField(fillData, strokeData, rasterW, rasterH);
+        svgFileName = fileName;
+        lastSvgText = svgText;
+        svgActive = true;
+        svgEnabledCheckbox.disabled = false;
+        svgEnabledCheckbox.checked = true;
+        svgStatusEl.textContent = fileName;
+        resizeParticlePool();
+        assignStrayFlags();
+        updateHud();
+      } catch (err) {
+        svgStatusEl.textContent = "Failed to load SVG";
+        svgFillData = null;
+        svgStrokeData = null;
+        svgDistField = null;
+        svgActive = false;
+        svgEnabledCheckbox.checked = false;
+        svgEnabledCheckbox.disabled = true;
+        resizeParticlePool();
+        updateHud();
+      }
+    }
+
+    // Weighted rejection sampling: pick a random point, accept it with
+    // probability proportional to densityAtY there. Denser regions get picked
+    // more often — the standard stippling technique, just against a live
+    // parametric field instead of an image.
+    function sampleDensityPoint() {
+      const stopNy = densityStopNy();
+      if (stopNy <= -1 + 1e-6) return null; // no fade zone at all (stop at the very top)
+      for (let attempt = 0; attempt < 200; attempt++) {
+        const ny = rand(-1, stopNy); // never below the stop line — that's the solid fill's territory
+        const d = densityAtY(ny);
+        if (Math.random() < d) {
+          return { x: rand(-1, 1), y: ny };
+        }
+      }
+      return null;
+    }
+
+    function assignDensityTargets() {
+      // Every particle participates in density mode — the stray/Coverage
+      // mechanism is an outline-mode concept (residual sand that missed a
+      // traced shape); a gradient has no "missed" state, and stray particles
+      // wandering the Chladni field would show up right where the spec calls
+      // for nothing at all: the top edge.
+      for (const p of particles) {
+        const pt = sampleDensityPoint();
+        if (pt) {
+          p.targetX = pt.x;
+          p.targetY = pt.y;
+        }
+      }
+    }
+
+    // Density mode has no async load step at all — it's pure math — so
+    // selecting it activates immediately, no upload required.
+    function activateDensityMode() {
+      const svgEnabledCheckbox = document.getElementById("ctl-svg-enabled");
+      svgActive = true;
+      svgEnabledCheckbox.disabled = false;
+      svgEnabledCheckbox.checked = true;
+      resizeParticlePool();
+      assignDensityTargets();
+      updateHud();
+    }
+
+    function setSvgInterpretation(mode) {
+      svgInterpretation = mode;
+      document.querySelectorAll("#svg-interp-toggle .seg-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.interp === mode);
+      });
+      const outlineUploadEl = document.getElementById("outline-upload");
+      if (outlineUploadEl) outlineUploadEl.hidden = mode !== "outline";
+      const outlineParamsEl = document.getElementById("outline-params");
+      if (outlineParamsEl) outlineParamsEl.hidden = mode !== "outline";
+      const densityParamsEl = document.getElementById("density-params");
+      if (densityParamsEl) densityParamsEl.hidden = mode !== "density";
+
+      if (mode === "density") {
+        activateDensityMode();
+        return;
+      }
+      // Switching back to outline: reactivate a previously uploaded shape if
+      // there is one, otherwise stay inactive until the user uploads one.
+      if (lastSvgText) {
+        loadSvgShape(lastSvgText, svgFileName, false);
+      } else {
+        svgActive = false;
+        const svgEnabledCheckbox = document.getElementById("ctl-svg-enabled");
+        svgEnabledCheckbox.checked = false;
+        svgEnabledCheckbox.disabled = true;
+        resizeParticlePool();
+        updateHud();
+      }
+    }
+
+    function clearSvgShape() {
+      svgFillData = null;
+      svgStrokeData = null;
+      svgDistField = null;
+      svgActive = false;
+      svgFileName = "";
+      lastSvgText = "";
+      svgAspect = 1;
+      svgRasterW = SVG_RASTER_MAX;
+      svgRasterH = SVG_RASTER_MAX;
+      if (aspectMode === "match-svg") setAspectMode("1:1");
+      const fileInput = document.getElementById("ctl-svg-file");
+      const svgEnabledCheckbox = document.getElementById("ctl-svg-enabled");
+      if (fileInput) fileInput.value = "";
+      if (svgEnabledCheckbox) { svgEnabledCheckbox.checked = false; svgEnabledCheckbox.disabled = true; }
+      const svgStatusEl = document.getElementById("svg-status");
+      if (svgStatusEl) svgStatusEl.textContent = "No shape loaded";
+      setSvgInterpretation("outline"); // also resizes the pool and updates the HUD
+    }
+
+    function updateHud() {
+      const showShape = svgActive && (svgInterpretation === "density" || svgFileName);
+      hudModeNumeric.hidden = !!showShape;
+      hudModeShape.hidden = !showShape;
+      if (showShape) modeShapeEl.textContent = svgInterpretation === "density" ? "Gradient" : svgFileName;
+    }
+
+    class Particle {
+      constructor() {
+        this.position = new Vec2(rand(w1, w2), rand(h1, h2));
+        this.velocity = Vec2.random2D().mult(rand(0.5, 1.5));
+        this.acceleration = new Vec2();
+        this.stray = false; // exempt from the shape's directed pull; classified by assignStrayFlags()
+        this.targetX = 0; // density mode: assigned point, normalized -1..1, by assignDensityTargets()
+        this.targetY = 0;
+      }
+      edges() {
+        if (this.position.x > w2) this.position.x = w1;
+        else if (this.position.x < w1) this.position.x = w2;
+        if (this.position.y > h2) this.position.y = h1;
+        else if (this.position.y < h1) this.position.y = h2;
+      }
+      seek() {
+        const x = mapRange(this.position.x, w1, w2, -1, 1);
+        const y = mapRange(this.position.y, h1, h2, -1, 1);
+        const val = fieldValue(x, y);
+        const target = this.position.copy();
+        if (Math.abs(val) > CONFIG.threshold) {
+          target.x += rand(-3, 3);
+          target.y += rand(-3, 3);
+        }
+        const desired = target.sub(this.position);
+        desired.setMag(CONFIG.maxSpeed);
+        const steering = desired.sub(this.velocity);
+        steering.limit(CONFIG.maxForce);
+        return steering;
+      }
+      // Random-walk motion style, ported from PettaBoy's Cymatics-Simulator-Chladni:
+      // step size scales with |field(x,y)| so louder (antinode) regions jitter harder
+      // and nodes settle — with a floor so particles never fully freeze.
+      walk(envelope) {
+        const x = mapRange(this.position.x, w1, w2, -1, 1);
+        const y = mapRange(this.position.y, h1, h2, -1, 1);
+        const val = fieldValue(x, y);
+        let amp = CONFIG.grainAmplitude * Math.abs(val);
+        if (amp < CONFIG.grainMinWalk) amp = CONFIG.grainMinWalk;
+        amp *= envelope;
+        const scaleX = (w2 - w1) / 2;
+        const scaleY = (h2 - h1) / 2;
+        this.position.x += rand(-amp, amp) * scaleX;
+        this.position.y += rand(-amp, amp) * scaleY;
+      }
+      clampEdges() {
+        if (this.position.x < w1) this.position.x = w1;
+        else if (this.position.x > w2) this.position.x = w2;
+        if (this.position.y < h1) this.position.y = h1;
+        else if (this.position.y > h2) this.position.y = h2;
+      }
+      // Directed move toward the shape at a speed calibrated so even a particle
+      // starting in the far corner arrives within CONFIG.svgSettleSeconds — bounded,
+      // controllable convergence instead of relying on undirected diffusion.
+      approachShape(x, y, envelope) {
+        const dir = svgGradientDirection(x, y);
+        const step = ((2 * Math.SQRT2) / (CONFIG.svgSettleSeconds * 60)) * envelope;
+        const scaleX = (w2 - w1) / 2;
+        const scaleY = (h2 - h1) / 2;
+        this.position.x += dir.x * step * scaleX;
+        this.position.y += dir.y * step * scaleY;
+        this.clampEdges();
+        this.velocity.x = 0;
+        this.velocity.y = 0;
+      }
+      // Density mode: move straight at the assigned point, at a speed calibrated
+      // so the farthest possible particle still arrives within svgSettleSeconds.
+      // Distance shrinking the step naturally brings it to an exact, motionless
+      // rest — grain style adds a small persistent jitter once there, matching
+      // its always-alive character elsewhere.
+      updateDensityTarget(envelope) {
+        const tx = mapRange(this.targetX, -1, 1, w1, w2);
+        const ty = mapRange(this.targetY, -1, 1, h1, h2);
+        const dx = tx - this.position.x;
+        const dy = ty - this.position.y;
+        const dist = Math.hypot(dx, dy);
+        const maxDist = Math.hypot(w2 - w1, h2 - h1) || 1;
+        const step = (maxDist / (CONFIG.svgSettleSeconds * 60)) * envelope;
+        if (dist > step) {
+          this.position.x += (dx / dist) * step;
+          this.position.y += (dy / dist) * step;
+        } else {
+          this.position.x = tx;
+          this.position.y = ty;
+          if (motionStyle === "grain") {
+            const scaleX = (w2 - w1) / 2;
+            const scaleY = (h2 - h1) / 2;
+            const jitter = CONFIG.grainMinWalk * envelope;
+            this.position.x += rand(-jitter, jitter) * scaleX;
+            this.position.y += rand(-jitter, jitter) * scaleY;
+          }
+        }
+        this.clampEdges();
+        this.velocity.x = 0;
+        this.velocity.y = 0;
+      }
+      update(envelope) {
+        // A fully-decayed envelope means true rest: skip everything, no
+        // exceptions — not grain's floor jitter, not stray ambient wandering.
+        if (envelope <= 0) return;
+        // Density mode has no stray/Coverage concept — every particle is
+        // density-driven, unconditionally.
+        if (svgActive && svgInterpretation === "density") {
+          this.updateDensityTarget(envelope);
+          return;
+        }
+        if (svgActive && !this.stray) {
+          const x = mapRange(this.position.x, w1, w2, -1, 1);
+          const y = mapRange(this.position.y, h1, h2, -1, 1);
+          if (svgOutsideAt(x, y)) {
+            this.approachShape(x, y, envelope);
+            return;
+          }
+        }
+        if (motionStyle === "grain") {
+          this.walk(envelope);
+          this.clampEdges();
+          return;
+        }
+        this.edges();
+        this.acceleration.add(this.seek());
+        this.velocity.add(this.acceleration);
+        this.velocity.limit(CONFIG.maxSpeed);
+        this.position.x += this.velocity.x * envelope;
+        this.position.y += this.velocity.y * envelope;
+        this.acceleration.mult(0);
+      }
+    }
+
+    function computeBounds() {
+      const margin = Math.min(width, height) * CONFIG.marginRatio;
+      w1 = margin; w2 = width - margin;
+      h1 = margin; h2 = height - margin;
+    }
+
+    function targetParticleCount() {
+      if (svgActive && svgInterpretation === "density") {
+        return Math.round(clamp(CONFIG.densityParticleCount, 1000, 200000));
+      }
+      return Math.round(clamp(width * height * CONFIG.particleDensity, CONFIG.minParticles, CONFIG.maxParticles));
+    }
+
+    function resizeParticlePool() {
+      const target = targetParticleCount();
+      if (particles.length < target) {
+        while (particles.length < target) particles.push(new Particle());
+        if (svgActive) {
+          if (svgInterpretation === "density") assignDensityTargets();
+          else assignStrayFlags();
+        }
+      } else if (particles.length > target) {
+        particles.length = target;
+      }
+    }
+
+    // Largest box at the target aspect ratio that fits inside the available
+    // viewport (minus #stage-wrap's padding) — proportional "contain" fit, no
+    // stretching in either axis. "Fill" mode zeroes the padding and targets the
+    // viewport's own current aspect, which makes this same math fill it exactly.
+    function computeStageSize() {
+      stageWrapEl.classList.toggle("fill", aspectMode === "fill");
+      const wrapStyle = getComputedStyle(stageWrapEl);
+      const padX = parseFloat(wrapStyle.paddingLeft) + parseFloat(wrapStyle.paddingRight);
+      const padY = parseFloat(wrapStyle.paddingTop) + parseFloat(wrapStyle.paddingBottom);
+      const availW = Math.max(window.innerWidth - padX, 40);
+      const availH = Math.max(window.innerHeight - padY, 40);
+      const targetAspect = getTargetAspect();
+      let stageW, stageH;
+      if (availW / availH > targetAspect) {
+        stageH = availH;
+        stageW = availH * targetAspect;
+      } else {
+        stageW = availW;
+        stageH = availW / targetAspect;
+      }
+      return { stageW, stageH };
+    }
+
+    function resize() {
+      const { stageW, stageH } = computeStageSize();
+      width = stageW;
+      height = stageH;
+      stageEl.style.width = stageW + "px";
+      stageEl.style.height = stageH + "px";
+
+      // "Dimensions" mode renders at an exact pixel resolution, decoupled from
+      // display size/dpr — the canvas is downsampled on screen but the actual
+      // simulation runs at the requested output size.
+      let pixelW, pixelH;
+      if (aspectMode === "dimensions") {
+        pixelW = Math.max(1, Math.round(CONFIG.dimW));
+        pixelH = Math.max(1, Math.round(CONFIG.dimH));
+      } else {
+        dpr = Math.min(window.devicePixelRatio || 1, 2);
+        pixelW = Math.round(width * dpr);
+        pixelH = Math.round(height * dpr);
+      }
+      canvas.width = pixelW;
+      canvas.height = pixelH;
+      canvas.style.width = width + "px";
+      canvas.style.height = height + "px";
+      ctx.setTransform(pixelW / width, 0, 0, pixelH / height, 0, 0);
+      computeBounds();
+      resizeParticlePool();
+    }
+
+    function setAspectMode(mode) {
+      aspectMode = mode;
+      const select = document.getElementById("ctl-aspect");
+      if (select) select.value = mode;
+      const dimRow = document.getElementById("dimensions-row");
+      if (dimRow) dimRow.hidden = mode !== "dimensions";
+      resize();
+    }
+
+    function shufflePattern() {
+      // With an SVG shape active there's no "next random pattern" — just kick the
+      // particles so they scatter and resettle back onto the same shape.
+      if (svgActive) {
+        if (svgInterpretation === "density") assignDensityTargets();
+        else assignStrayFlags();
+      } else {
+        let newN = randInt(CONFIG.minMode, CONFIG.maxMode);
+        let newM = randInt(CONFIG.minMode, CONFIG.maxMode);
+        if (newN === newM) newM = randInt(CONFIG.minMode, CONFIG.maxMode);
+        n = newN; m = newM;
+        modeNEl.textContent = n;
+        modeMEl.textContent = m;
+      }
+      triggerVibration();
+    }
+
+    function draw() {
+      ctx.fillStyle = CONFIG.bgColor;
+      ctx.fillRect(0, 0, width, height);
+
+      if (svgActive && svgInterpretation === "density") {
+        const stopY = mapRange(densityStopNy(), -1, 1, h1, h2);
+
+        // Guaranteed-solid fill below the stop line — particle density alone
+        // can never read as truly opaque, no matter how packed.
+        if (stopY < height) {
+          ctx.fillStyle = CONFIG.particleColor;
+          ctx.fillRect(0, stopY, width, height - stopY);
+        }
+
+        // A continuous alpha wash across the fade zone, painted with the exact
+        // same curve the particles are sampled from — the point-cloud alone is
+        // always statistically noisy near a boundary, so this is what actually
+        // guarantees the "one continuous gradient, no seam" look; the sparse
+        // particles on top add sand-like grain, especially where the wash is
+        // nearly invisible near the top edge.
+        if (stopY > h1) {
+          const { r, g, b } = hexToRgb(CONFIG.particleColor);
+          const gradient = ctx.createLinearGradient(0, h1, 0, stopY);
+          const stopNy = densityStopNy();
+          const STEPS = 24;
+          for (let i = 0; i <= STEPS; i++) {
+            const t = i / STEPS;
+            const ny = mapRange(t, 0, 1, -1, stopNy); // sweep top edge -> stop line
+            const alpha = densityAtY(ny);
+            gradient.addColorStop(t, `rgba(${r}, ${g}, ${b}, ${alpha.toFixed(3)})`);
+          }
+          ctx.fillStyle = gradient;
+          ctx.fillRect(0, h1, width, stopY - h1);
+        }
+      }
+
+      ctx.fillStyle = CONFIG.particleColor;
+      const envelope = getVibrationEnvelope();
+      ctx.beginPath();
+      for (const p of particles) {
+        p.update(envelope);
+        ctx.moveTo(p.position.x + CONFIG.dotRadius, p.position.y);
+        ctx.arc(p.position.x, p.position.y, CONFIG.dotRadius, 0, Math.PI * 2);
+      }
+      ctx.fill();
+    }
+
+    function loop() {
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // Click anywhere on the page to reshuffle — mirrors the reference sketch's
+    // mousePressed() behavior. Skips the control panel/toggle so those keep
+    // their own click behavior instead of also triggering a shuffle.
+    window.addEventListener("click", (e) => {
+      if (e.target.closest("#control-panel, #panel-toggle")) return;
+      shufflePattern();
+    });
+
+    let resizeTimer = null;
+    window.addEventListener("resize", () => {
+      clearTimeout(resizeTimer);
+      resizeTimer = setTimeout(resize, 120);
+    });
+
+    let cycleTimerId = null;
+    let autoCycleEnabled = false; // off by default: particles settle and stay until clicked
+
+    function stopCycle() {
+      if (cycleTimerId) { clearInterval(cycleTimerId); cycleTimerId = null; }
+    }
+
+    function startCycle() {
+      stopCycle();
+      if (!reduceMotion && autoCycleEnabled) {
+        cycleTimerId = setInterval(shufflePattern, CONFIG.cycleMs);
+      }
+    }
+
+    resize();
+
+    if (reduceMotion) {
+      // Settle instantly to a static frame rather than animating a burst.
+      for (let i = 0; i < 260; i++) {
+        for (const p of particles) p.update(1);
+      }
+      draw();
+    } else {
+      triggerVibration();
+      loop();
+      startCycle();
+    }
+
+    // --- Control panel ---------------------------------------------------
+    const DEFAULT_CONFIG = JSON.parse(JSON.stringify(CONFIG));
+    const blurState = { amount: 6 };
+    const DEFAULT_BLUR = { ...blurState };
+
+    const root = document.documentElement;
+    const blurLayer = document.querySelector(".blur-layer");
+
+    function applyBackground(hex) {
+      CONFIG.bgColor = hex;
+      root.style.setProperty("--bg", hex);
+    }
+
+    function applyParticleColor(hex) {
+      CONFIG.particleColor = hex;
+      root.style.setProperty("--particle", hex);
+    }
+
+    function applyBlur() {
+      const f = `blur(${blurState.amount}px)`;
+      blurLayer.style.backdropFilter = f;
+      blurLayer.style.webkitBackdropFilter = f;
+    }
+
+    function setRangeUI(ctlId, outId, value, format) {
+      const input = document.getElementById(ctlId);
+      const out = document.getElementById(outId);
+      input.value = value;
+      if (out) out.textContent = format ? format(value) : String(value);
+    }
+
+    function bindRange(ctlId, outId, onInput, format) {
+      const input = document.getElementById(ctlId);
+      const out = outId ? document.getElementById(outId) : null;
+      input.addEventListener("input", () => {
+        const v = parseFloat(input.value);
+        if (out) out.textContent = format ? format(v) : String(v);
+        onInput(v);
+      });
+    }
+
+    bindRange("ctl-size", "out-size", (v) => { CONFIG.dotRadius = v; }, (v) => v.toFixed(2));
+    bindRange("ctl-density", "out-density", (v) => { CONFIG.particleDensity = v; resizeParticlePool(); }, (v) => v.toFixed(4));
+
+    bindRange("ctl-speed", "out-speed", (v) => { CONFIG.maxSpeed = v; }, (v) => v.toFixed(2));
+    bindRange("ctl-force", "out-force", (v) => { CONFIG.maxForce = v; }, (v) => v.toFixed(2));
+    bindRange("ctl-threshold", "out-threshold", (v) => { CONFIG.threshold = v; }, (v) => v.toFixed(2));
+    bindRange("ctl-grain-amp", "out-grain-amp", (v) => { CONFIG.grainAmplitude = v; }, (v) => v.toFixed(3));
+    bindRange("ctl-grain-floor", "out-grain-floor", (v) => { CONFIG.grainMinWalk = v; }, (v) => v.toFixed(4));
+    bindRange("ctl-margin", "out-margin", (v) => { CONFIG.marginRatio = v; computeBounds(); }, (v) => v.toFixed(3));
+    bindRange("ctl-cycle", "out-cycle", (v) => { CONFIG.cycleMs = Math.round(v * 1000); startCycle(); }, (v) => v.toFixed(1) + "s");
+    bindRange("ctl-vib-duration", "out-vib-duration", (v) => { CONFIG.vibrationDuration = v; }, (v) => v.toFixed(1) + "s");
+    bindRange("ctl-vib-easein", "out-vib-easein", (v) => { CONFIG.vibrationEaseIn = v / 100; }, (v) => Math.round(v) + "%");
+
+    bindRange("ctl-svg-interior", "out-svg-interior", (v) => { CONFIG.svgInterior = v; }, (v) => v.toFixed(2));
+
+    let svgPathWidthTimer = null;
+    bindRange("ctl-svg-pathwidth", "out-svg-pathwidth", (v) => {
+      CONFIG.svgPathWidth = v;
+      clearTimeout(svgPathWidthTimer);
+      svgPathWidthTimer = setTimeout(() => {
+        if (lastSvgText && svgInterpretation === "outline") loadSvgShape(lastSvgText, svgFileName, false);
+      }, 200);
+    }, (v) => v.toFixed(1) + "%");
+
+    bindRange("ctl-svg-settle", "out-svg-settle", (v) => { CONFIG.svgSettleSeconds = v; }, (v) => v.toFixed(1) + "s");
+
+    // Stop/Gamma changes need no reload — the field is evaluated live — just a
+    // fresh sample of existing particles' targets, plus a burst so the move is
+    // visible rather than only showing up next time something else triggers one.
+    let densityGradientTimer = null;
+    function scheduleDensityRegen() {
+      clearTimeout(densityGradientTimer);
+      densityGradientTimer = setTimeout(() => {
+        if (svgActive && svgInterpretation === "density") {
+          assignDensityTargets();
+          triggerVibration();
+        }
+      }, 150);
+    }
+
+    bindRange("ctl-density-stop", "out-density-stop", (v) => {
+      CONFIG.densityStop = v / 100;
+      scheduleDensityRegen();
+    }, (v) => Math.round(v) + "%");
+
+    bindRange("ctl-density-gamma", "out-density-gamma", (v) => {
+      CONFIG.densityGamma = v;
+      scheduleDensityRegen();
+    }, (v) => v.toFixed(1));
+
+    let densityCountTimer = null;
+    bindRange("ctl-density-count", "out-density-count", (v) => {
+      CONFIG.densityParticleCount = v;
+      clearTimeout(densityCountTimer);
+      densityCountTimer = setTimeout(() => {
+        resizeParticlePool();
+        triggerVibration();
+      }, 150);
+    }, (v) => String(Math.round(v)));
+    bindRange("ctl-svg-coverage", "out-svg-coverage", (v) => {
+      CONFIG.svgCoverage = v;
+      if (svgActive && svgInterpretation === "outline") assignStrayFlags();
+    }, (v) => Math.round(v) + "%");
+
+    bindRange("ctl-modemin", "out-modemin", (v) => {
+      CONFIG.minMode = Math.round(v);
+      if (CONFIG.minMode >= CONFIG.maxMode) {
+        CONFIG.maxMode = CONFIG.minMode + 1;
+        setRangeUI("ctl-modemax", "out-modemax", CONFIG.maxMode, (mv) => Math.round(mv));
+      }
+    }, (v) => String(Math.round(v)));
+
+    bindRange("ctl-modemax", "out-modemax", (v) => {
+      CONFIG.maxMode = Math.round(v);
+      if (CONFIG.maxMode <= CONFIG.minMode) {
+        CONFIG.minMode = Math.max(1, CONFIG.maxMode - 1);
+        setRangeUI("ctl-modemin", "out-modemin", CONFIG.minMode, (mv) => Math.round(mv));
+      }
+    }, (v) => String(Math.round(v)));
+
+    bindRange("ctl-blur", "out-blur", (v) => { blurState.amount = v; applyBlur(); }, (v) => v.toFixed(1));
+
+    document.getElementById("ctl-bg").addEventListener("input", (e) => applyBackground(e.target.value));
+    document.getElementById("ctl-particle").addEventListener("input", (e) => applyParticleColor(e.target.value));
+
+    document.getElementById("ctl-autocycle").addEventListener("change", (e) => {
+      autoCycleEnabled = e.target.checked;
+      startCycle();
+    });
+
+    document.getElementById("btn-shuffle").addEventListener("click", shufflePattern);
+
+    document.getElementById("ctl-svg-file").addEventListener("change", (e) => {
+      const file = e.target.files && e.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = () => loadSvgShape(String(reader.result), file.name, true);
+      reader.onerror = () => { document.getElementById("svg-status").textContent = "Could not read file"; };
+      reader.readAsText(file);
+    });
+
+    document.getElementById("ctl-svg-enabled").addEventListener("change", (e) => {
+      if (svgInterpretation === "density") {
+        if (e.target.checked) {
+          activateDensityMode();
+        } else {
+          svgActive = false;
+          resizeParticlePool();
+          updateHud();
+        }
+      } else {
+        svgActive = e.target.checked && !!lastSvgText;
+        updateHud();
+      }
+    });
+
+    document.getElementById("btn-svg-clear").addEventListener("click", clearSvgShape);
+
+    document.querySelectorAll("#svg-interp-toggle .seg-btn").forEach((btn) => {
+      btn.addEventListener("click", () => setSvgInterpretation(btn.dataset.interp));
+    });
+
+    document.getElementById("ctl-aspect").addEventListener("change", (e) => {
+      setAspectMode(e.target.value);
+      // Only the outline mask is aspect-dependent (it's rasterized to match the
+      // stage shape); the density gradient is pure normalized-Y math and
+      // adapts automatically.
+      if (lastSvgText && svgInterpretation === "outline") loadSvgShape(lastSvgText, svgFileName, false);
+    });
+
+    let dimensionsTimer = null;
+    function onDimensionInput() {
+      clearTimeout(dimensionsTimer);
+      dimensionsTimer = setTimeout(() => {
+        if (aspectMode !== "dimensions") return;
+        resize();
+        if (lastSvgText && svgInterpretation === "outline") loadSvgShape(lastSvgText, svgFileName, false);
+      }, 200);
+    }
+    document.getElementById("ctl-dim-w").addEventListener("input", (e) => {
+      CONFIG.dimW = Math.max(1, parseInt(e.target.value, 10) || 1);
+      onDimensionInput();
+    });
+    document.getElementById("ctl-dim-h").addEventListener("input", (e) => {
+      CONFIG.dimH = Math.max(1, parseInt(e.target.value, 10) || 1);
+      onDimensionInput();
+    });
+
+    const steeringParamsEl = document.getElementById("steering-params");
+    const grainParamsEl = document.getElementById("grain-params");
+    const motionStyleButtons = document.querySelectorAll("#motion-style-toggle .seg-btn");
+
+    function setMotionStyle(style) {
+      motionStyle = style;
+      steeringParamsEl.hidden = style !== "steering";
+      grainParamsEl.hidden = style !== "grain";
+      motionStyleButtons.forEach((btn) => btn.classList.toggle("active", btn.dataset.style === style));
+    }
+
+    motionStyleButtons.forEach((btn) => {
+      btn.addEventListener("click", () => setMotionStyle(btn.dataset.style));
+    });
+
+    function syncPanelFromState() {
+      document.querySelectorAll("#svg-interp-toggle .seg-btn").forEach((btn) => {
+        btn.classList.toggle("active", btn.dataset.interp === svgInterpretation);
+      });
+      const outlineUploadEl = document.getElementById("outline-upload");
+      if (outlineUploadEl) outlineUploadEl.hidden = svgInterpretation !== "outline";
+      const outlineParamsEl = document.getElementById("outline-params");
+      if (outlineParamsEl) outlineParamsEl.hidden = svgInterpretation !== "outline";
+      const densityParamsEl = document.getElementById("density-params");
+      if (densityParamsEl) densityParamsEl.hidden = svgInterpretation !== "density";
+      setRangeUI("ctl-density-stop", "out-density-stop", CONFIG.densityStop * 100, (v) => Math.round(v) + "%");
+      setRangeUI("ctl-density-count", "out-density-count", CONFIG.densityParticleCount, (v) => String(Math.round(v)));
+      setRangeUI("ctl-density-gamma", "out-density-gamma", CONFIG.densityGamma, (v) => v.toFixed(1));
+      setRangeUI("ctl-size", "out-size", CONFIG.dotRadius, (v) => v.toFixed(2));
+      setRangeUI("ctl-density", "out-density", CONFIG.particleDensity, (v) => v.toFixed(4));
+      setRangeUI("ctl-speed", "out-speed", CONFIG.maxSpeed, (v) => v.toFixed(2));
+      setRangeUI("ctl-force", "out-force", CONFIG.maxForce, (v) => v.toFixed(2));
+      setRangeUI("ctl-threshold", "out-threshold", CONFIG.threshold, (v) => v.toFixed(2));
+      setRangeUI("ctl-grain-amp", "out-grain-amp", CONFIG.grainAmplitude, (v) => v.toFixed(3));
+      setRangeUI("ctl-grain-floor", "out-grain-floor", CONFIG.grainMinWalk, (v) => v.toFixed(4));
+      setRangeUI("ctl-margin", "out-margin", CONFIG.marginRatio, (v) => v.toFixed(3));
+      setRangeUI("ctl-cycle", "out-cycle", CONFIG.cycleMs / 1000, (v) => v.toFixed(1) + "s");
+      setRangeUI("ctl-vib-duration", "out-vib-duration", CONFIG.vibrationDuration, (v) => v.toFixed(1) + "s");
+      setRangeUI("ctl-vib-easein", "out-vib-easein", CONFIG.vibrationEaseIn * 100, (v) => Math.round(v) + "%");
+      setRangeUI("ctl-svg-interior", "out-svg-interior", CONFIG.svgInterior, (v) => v.toFixed(2));
+      setRangeUI("ctl-svg-pathwidth", "out-svg-pathwidth", CONFIG.svgPathWidth, (v) => v.toFixed(1) + "%");
+      setRangeUI("ctl-svg-settle", "out-svg-settle", CONFIG.svgSettleSeconds, (v) => v.toFixed(1) + "s");
+      setRangeUI("ctl-svg-coverage", "out-svg-coverage", CONFIG.svgCoverage, (v) => Math.round(v) + "%");
+      setRangeUI("ctl-modemin", "out-modemin", CONFIG.minMode, (v) => String(Math.round(v)));
+      setRangeUI("ctl-modemax", "out-modemax", CONFIG.maxMode, (v) => String(Math.round(v)));
+      setRangeUI("ctl-blur", "out-blur", blurState.amount, (v) => v.toFixed(1));
+      document.getElementById("ctl-bg").value = CONFIG.bgColor;
+      document.getElementById("ctl-particle").value = CONFIG.particleColor;
+      document.getElementById("ctl-aspect").value = aspectMode;
+      document.getElementById("ctl-dim-w").value = CONFIG.dimW;
+      document.getElementById("ctl-dim-h").value = CONFIG.dimH;
+    }
+
+    document.getElementById("btn-reset").addEventListener("click", () => {
+      Object.assign(CONFIG, JSON.parse(JSON.stringify(DEFAULT_CONFIG)));
+      Object.assign(blurState, DEFAULT_BLUR);
+      applyBackground(CONFIG.bgColor);
+      applyParticleColor(CONFIG.particleColor);
+      applyBlur();
+      clearSvgShape();
+      setAspectMode("1:1");
+      computeBounds();
+      resizeParticlePool();
+      autoCycleEnabled = false;
+      document.getElementById("ctl-autocycle").checked = false;
+      setMotionStyle("steering");
+      startCycle();
+      triggerVibration();
+      syncPanelFromState();
+    });
+
+    document.getElementById("btn-copy").addEventListener("click", () => {
+      const payload = {
+        ...CONFIG,
+        motionStyle,
+        aspectMode,
+        blur: { ...blurState },
+        svgShape: svgActive ? svgFileName : null,
+        svgInterpretation,
+      };
+      const text = JSON.stringify(payload, null, 2);
+      const btn = document.getElementById("btn-copy");
+      const original = btn.textContent;
+      navigator.clipboard
+        .writeText(text)
+        .then(() => { btn.textContent = "Copied"; })
+        .catch(() => { btn.textContent = "Copy failed"; });
+      setTimeout(() => { btn.textContent = original; }, 1400);
+    });
+
+    document.getElementById("btn-export").addEventListener("click", () => {
+      // Composite onto a fresh canvas so the export matches what's actually on
+      // screen (including the blur, which lives on a separate CSS layer and
+      // never touches the source canvas's own pixel data) rather than just the
+      // raw, sharp particle dots.
+      const exportCanvas = document.createElement("canvas");
+      exportCanvas.width = canvas.width;
+      exportCanvas.height = canvas.height;
+      const exportCtx = exportCanvas.getContext("2d");
+      exportCtx.fillStyle = CONFIG.bgColor;
+      exportCtx.fillRect(0, 0, exportCanvas.width, exportCanvas.height);
+      const pixelScale = canvas.width / width; // actual-pixel-to-CSS-pixel ratio
+      exportCtx.filter = blurState.amount > 0 ? `blur(${(blurState.amount * pixelScale).toFixed(2)}px)` : "none";
+      exportCtx.drawImage(canvas, 0, 0);
+      exportCtx.filter = "none";
+
+      const btn = document.getElementById("btn-export");
+      const original = btn.textContent;
+      const setStatus = (text) => {
+        btn.textContent = text;
+        setTimeout(() => { btn.textContent = original; }, 1400);
+      };
+
+      exportCanvas.toBlob(async (blob) => {
+        if (!blob) { setStatus("Export failed"); return; }
+        const filename = `resonant-plate-${Date.now()}.png`;
+
+        // Inside the Claude Artifact preview, script-triggered downloads are
+        // inert — offer the file through the downloads capability instead.
+        // Opened as a real file or embedded on an actual site, window.claude
+        // doesn't exist at all, so this falls through to a normal download link.
+        if (window.claude && typeof window.claude.use === "function") {
+          try {
+            const downloads = await window.claude.use("downloads");
+            if (downloads) {
+              await downloads.save({ filename, data: blob });
+              setStatus("Exported");
+              return;
+            }
+          } catch (err) {
+            // Declined, rate-limited, or unavailable — fall back below.
+          }
+        }
+
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement("a");
+        a.href = url;
+        a.download = filename;
+        document.body.appendChild(a);
+        a.click();
+        a.remove();
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        setStatus("Exported");
+      }, "image/png");
+    });
+
+    const panelToggle = document.getElementById("panel-toggle");
+    const controlPanel = document.getElementById("control-panel");
+    panelToggle.addEventListener("click", () => {
+      controlPanel.hidden = false;
+      panelToggle.hidden = true;
+    });
+    document.getElementById("panel-close").addEventListener("click", () => {
+      controlPanel.hidden = true;
+      panelToggle.hidden = false;
+    });
+
+    applyBackground(CONFIG.bgColor);
+    applyParticleColor(CONFIG.particleColor);
+    applyBlur();
+    setMotionStyle("steering");
+    updateHud();
+    syncPanelFromState();
+  })();
+</script>
